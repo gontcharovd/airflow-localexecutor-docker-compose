@@ -24,7 +24,7 @@
 # The following variables are supported:
 #
 # AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:master-python3.8
+#                                Default: apache/airflow:|version|
 # AIRFLOW_UID                  - User ID in Airflow containers
 #                                Default: 50000
 # AIRFLOW_GID                  - Group ID in Airflow containers
@@ -41,7 +41,7 @@
 #
 # Feel free to modify this file to suit your needs.
 ---
-version: '3'
+version: '3.7'
 x-airflow-common:
   &airflow-common
   image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.1.2}
@@ -50,20 +50,23 @@ x-airflow-common:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
-    # AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
-    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__FERNET_KEY: '4Hdd9avr-HkljlDvGTVPntoKpvcEuMGuT_EqCewJ0I8='
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: 'false'
     AIRFLOW__API__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-apache-airflow-providers-docker}
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-apache-airflow-providers-docker==2.1.0rc2}
+    AIRFLOW__CORE__ENABLE_XCOM_PICKLING: "True"  # because of https://github.com/apache/airflow/issues/13487
+    AIRFLOW__WEBSERVER__BASE_URL: https://airflow.example.com
+    AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
+    AIRFLOW__WEBSERVER__RBAC: "True"
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
-  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
+  user: "${AIRFLOW_UID:-1000}:${AIRFLOW_GID:-0}"
   depends_on:
-    # redis:
-    #   condition: service_healthy
+    &airflow-common-depends-on
     postgres:
       condition: service_healthy
 
@@ -75,23 +78,12 @@ services:
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     volumes:
-      - postgres-db-volume:/var/lib/postgresql/data
+      - ./postgresql/data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 5s
       retries: 5
     restart: always
-
-  # redis:
-  #   image: redis:latest
-  #   ports:
-  #     - 6379:6379
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 5s
-  #     timeout: 30s
-  #     retries: 50
-  #   restart: always
 
   airflow-webserver:
     <<: *airflow-common
@@ -104,6 +96,10 @@ services:
       timeout: 10s
       retries: 5
     restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-scheduler:
     <<: *airflow-common
@@ -114,18 +110,10 @@ services:
       timeout: 10s
       retries: 5
     restart: always
-
-  # airflow-worker:
-  #   <<: *airflow-common
-  #   command: celery worker
-  #   healthcheck:
-  #     test:
-  #       - "CMD-SHELL"
-  #       - 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
-  #     interval: 10s
-  #     timeout: 10s
-  #     retries: 5
-  #   restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-init:
     <<: *airflow-common
@@ -137,17 +125,31 @@ services:
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
 
-  # flower:
-  #   <<: *airflow-common
-  #   command: celery flower
-  #   ports:
-  #     - 5555:5555
-  #   healthcheck:
-  #     test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
-  #     interval: 10s
-  #     timeout: 10s
-  #     retries: 5
-  #   restart: always
+  airflow-cli:
+    <<: *airflow-common
+    profiles:
+      - debug
+    environment:
+      <<: *airflow-common-env
+      CONNECTION_CHECK_MAX_COUNT: "0"
+    # Workaround for entrypoint issue. See: https://github.com/apache/airflow/issues/16252
+    command:
+      - bash
+      - -c
+      - airflow
+
+  # Required because of DockerOperator. For secure access and handling permissions.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.1.1
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      AUTH: 1
+      POST: 1
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: always
 
 volumes:
   postgres-db-volume:
