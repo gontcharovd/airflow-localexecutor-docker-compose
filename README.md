@@ -18,7 +18,7 @@ First you need to adapt the standard docker-compose.yaml file to work with
 the LocalExecutor and DockerOperator:
 
 1. line 50: replace `CeleryExecutor` with `LocalExecutor`
-2. line 58: add the `apache-airflow-providers-docker` package to `_PIP_ADDITIONAL_REQUIREMENTS`
+2. line 58: add the `apache-airflow-providers-docker==2.1.0rc2` package to `_PIP_ADDITIONAL_REQUIREMENTS`
 3. comment out or delete lines: 53, 65-66, 85-94, 118-128, 140-150
 
 You can now initialize the environment with `docker-compose up airflow-init`.
