@@ -1,12 +1,12 @@
-# Using the DockerOperator with the LocalExecutor in docker-compose.yaml
+# Airflow: using the DockerOperator with the LocalExecutor in Docker Compose
 
 This guide will allow you to run the DockerOperator using the LocalExecutor with
 Apache Airflow deployed on Docker Compose. The guide is split into four consecutive steps:
 
-* 1. Preparing the docker-compose.yaml
-* 2. Adding a new services in the docker-compose.yaml
-* 3. Creating a DAG that connects to the Docker API using this proxy
-* 4. Testing the DockerOperator
+1. Preparing the docker-compose.yaml
+2. Adding a new services in the docker-compose.yaml
+3. Creating a DAG that connects to the Docker API using this proxy
+4. Testing the DockerOperator
 
 To deploy Airflow on Docker  with Docker Compose you should fetch the docker-compose.yaml:
 
@@ -28,7 +28,11 @@ the LocalExecutor and DockerOperator:
 
 Note that the apache-airflow-providers version must be 2.1.0 or higher.
 
-You can now initialize the environment with `docker-compose up airflow-init`.
+You can now initialize the environment with:
+
+```
+docker-compose up airflow-init
+```
 
 ## 2. Adding a new services in the docker-compose.yaml
 
